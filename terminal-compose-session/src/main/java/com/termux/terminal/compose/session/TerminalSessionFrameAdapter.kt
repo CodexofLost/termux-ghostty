@@ -109,7 +109,7 @@ class TerminalSessionFrameAdapter {
         return List(imageCount) { index ->
             val src = getImagePlacement(index)
             val buffer: ByteBuffer? = if (src.bufferLen > 0 && pixelData != null) {
-                ByteBuffer.wrap(pixelData, src.bufferOffset, src.bufferLen).order(ByteOrder.nativeOrder())
+                ByteBuffer.wrap(pixelData, src.bufferOffset, src.bufferLen).slice().order(ByteOrder.nativeOrder())
             } else {
                 null
             }
@@ -130,8 +130,8 @@ class TerminalSessionFrameAdapter {
                 destHeightPx = src.destHeightPx,
                 pixelFormat = src.pixelFormat,
                 pixelBuffer = buffer,
-                textureWidth = if (src.srcWidth > 0) src.srcWidth else src.destWidthPx,
-                textureHeight = if (src.srcHeight > 0) src.srcHeight else src.destHeightPx
+                textureWidth = if (src.imageWidth > 0) src.imageWidth else if (src.srcWidth > 0) src.srcWidth else src.destWidthPx,
+                textureHeight = if (src.imageHeight > 0) src.imageHeight else if (src.srcHeight > 0) src.srcHeight else src.destHeightPx
             )
         }
     }
