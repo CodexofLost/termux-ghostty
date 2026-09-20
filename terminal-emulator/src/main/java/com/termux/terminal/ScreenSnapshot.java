@@ -610,27 +610,23 @@ public final class ScreenSnapshot {
                 int srcHeight = buffer.getInt();
                 int destWidthPx = buffer.getInt();
                 int destHeightPx = buffer.getInt();
+                int imageWidth = buffer.getInt();
+                int imageHeight = buffer.getInt();
                 int pixelFormat = buffer.getInt();
                 int bufferOffset = buffer.getInt();
                 int bufferLen = buffer.getInt();
-                mImagePlacements[i] = new ImagePlacement(imageId, placementId, imageGeneration, viewportCol, viewportRow, colSpan, rowSpan, zIndex, srcX, srcY, srcWidth, srcHeight, destWidthPx, destHeightPx, pixelFormat, bufferOffset, bufferLen);
+                mImagePlacements[i] = new ImagePlacement(imageId, placementId, imageGeneration, viewportCol, viewportRow, colSpan, rowSpan, zIndex, srcX, srcY, srcWidth, srcHeight, destWidthPx, destHeightPx, imageWidth, imageHeight, pixelFormat, bufferOffset, bufferLen);
             }
             buffer.position((buffer.position() + 7) & ~7);
-            int expectedPixelBytes = 0;
-            for (int i = 0; i < imageCount; i++) {
-                expectedPixelBytes += mImagePlacements[i].bufferLen;
-            }
-            if (expectedPixelBytes > buffer.remaining()) {
-                throw new IllegalStateException("Insufficient pixel data: expected " + expectedPixelBytes + " remaining " + buffer.remaining());
-            }
-            mImagePixelData = new byte[expectedPixelBytes];
-            if (expectedPixelBytes > 0) {
-                buffer.get(mImagePixelData, 0, expectedPixelBytes);
+            int pixelBytesCount = buffer.remaining();
+            mImagePixelData = new byte[pixelBytesCount];
+            if (pixelBytesCount > 0) {
+                buffer.get(mImagePixelData, 0, pixelBytesCount);
             }
             for (int i = 0; i < imageCount; i++) {
                 ImagePlacement p = mImagePlacements[i];
-                if (p.bufferOffset < 0 || p.bufferLen < 0 || p.bufferOffset + p.bufferLen > expectedPixelBytes) {
-                    throw new IllegalStateException("Invalid image buffer range for placement " + i);
+                if (p.bufferOffset < 0 || p.bufferLen < 0 || p.bufferOffset + p.bufferLen > pixelBytesCount) {
+                    throw new IllegalStateException("Invalid image buffer range for placement " + i + ": offset=" + p.bufferOffset + " len=" + p.bufferLen + " total=" + pixelBytesCount);
                 }
             }
         } else {
@@ -890,11 +886,13 @@ public final class ScreenSnapshot {
         public final int srcHeight;
         public final int destWidthPx;
         public final int destHeightPx;
+        public final int imageWidth;
+        public final int imageHeight;
         public final int pixelFormat;
         public final int bufferOffset;
         public final int bufferLen;
 
-        ImagePlacement(int imageId, int placementId, long imageGeneration, int viewportCol, int viewportRow, int colSpan, int rowSpan, int zIndex, int srcX, int srcY, int srcWidth, int srcHeight, int destWidthPx, int destHeightPx, int pixelFormat, int bufferOffset, int bufferLen) {
+        ImagePlacement(int imageId, int placementId, long imageGeneration, int viewportCol, int viewportRow, int colSpan, int rowSpan, int zIndex, int srcX, int srcY, int srcWidth, int srcHeight, int destWidthPx, int destHeightPx, int imageWidth, int imageHeight, int pixelFormat, int bufferOffset, int bufferLen) {
             this.imageId = imageId;
             this.placementId = placementId;
             this.imageGeneration = imageGeneration;
@@ -909,6 +907,8 @@ public final class ScreenSnapshot {
             this.srcHeight = srcHeight;
             this.destWidthPx = destWidthPx;
             this.destHeightPx = destHeightPx;
+            this.imageWidth = imageWidth;
+            this.imageHeight = imageHeight;
             this.pixelFormat = pixelFormat;
             this.bufferOffset = bufferOffset;
             this.bufferLen = bufferLen;

@@ -79,6 +79,8 @@ const SnapshotImagePlacement = extern struct {
     src_height: u32,
     dest_width_px: u32,
     dest_height_px: u32,
+    image_width: u32,
+    image_height: u32,
     pixel_format: u32,
     buffer_offset: u32,
     buffer_len: u32,
@@ -729,6 +731,11 @@ pub const Session = struct {
         if (storage.placements.count() == 0 and self.kitty_pinned_grid_spans.count() > 0) {
             self.kitty_pinned_grid_spans.clearRetainingCapacity();
         }
+
+        const ImageBufferLoc = struct { offset: u32, len: u32 };
+        var image_offsets: std.AutoHashMapUnmanaged(u32, ImageBufferLoc) = .empty;
+        defer image_offsets.deinit(self.alloc);
+
         var has_virtual = false;
         var it = storage.placements.iterator();
         while (it.next()) |entry| {
@@ -779,10 +786,18 @@ pub const Session = struct {
                 .rgba => 0,
                 else => 0,
             };
-            const buffer_offset: u32 = std.math.cast(u32, self.scratch_kitty_pixel_data.items.len) orelse continue;
-            const buffer_len: u32 = std.math.cast(u32, pixel_bytes.len) orelse continue;
-            // Append pixel buffer
-            try self.scratch_kitty_pixel_data.appendSlice(self.alloc, pixel_bytes);
+
+            const img_buf = if (image_offsets.get(key.image_id)) |cached|
+                cached
+            else blk: {
+                const buffer_offset: u32 = std.math.cast(u32, self.scratch_kitty_pixel_data.items.len) orelse continue;
+                const buffer_len: u32 = std.math.cast(u32, pixel_bytes.len) orelse continue;
+                try self.scratch_kitty_pixel_data.appendSlice(self.alloc, pixel_bytes);
+                const info = ImageBufferLoc{ .offset = buffer_offset, .len = buffer_len };
+                try image_offsets.put(self.alloc, key.image_id, info);
+                break :blk info;
+            };
+
             try self.scratch_kitty_placements.append(self.alloc, .{
                 .image_id = key.image_id,
                 .placement_id = key.placement_id.id,
@@ -798,9 +813,11 @@ pub const Session = struct {
                 .src_height = src.height,
                 .dest_width_px = pixel.width,
                 .dest_height_px = pixel.height,
+                .image_width = image.width,
+                .image_height = image.height,
                 .pixel_format = pixel_format,
-                .buffer_offset = buffer_offset,
-                .buffer_len = buffer_len,
+                .buffer_offset = img_buf.offset,
+                .buffer_len = img_buf.len,
             });
         }
 
@@ -837,10 +854,18 @@ pub const Session = struct {
                     .rgba => 0,
                     else => 0,
                 };
-                const buffer_offset: u32 = std.math.cast(u32, self.scratch_kitty_pixel_data.items.len) orelse continue;
-                const buffer_len: u32 = std.math.cast(u32, pixel_bytes.len) orelse continue;
 
-                try self.scratch_kitty_pixel_data.appendSlice(self.alloc, pixel_bytes);
+                const img_buf = if (image_offsets.get(virtual_placement.image_id)) |cached|
+                    cached
+                else blk: {
+                    const buffer_offset: u32 = std.math.cast(u32, self.scratch_kitty_pixel_data.items.len) orelse continue;
+                    const buffer_len: u32 = std.math.cast(u32, pixel_bytes.len) orelse continue;
+                    try self.scratch_kitty_pixel_data.appendSlice(self.alloc, pixel_bytes);
+                    const info = ImageBufferLoc{ .offset = buffer_offset, .len = buffer_len };
+                    try image_offsets.put(self.alloc, virtual_placement.image_id, info);
+                    break :blk info;
+                };
+
                 try self.scratch_kitty_placements.append(self.alloc, .{
                     .image_id = virtual_placement.image_id,
                     .placement_id = virtual_placement.placement_id,
@@ -856,9 +881,11 @@ pub const Session = struct {
                     .src_height = rendered.source_height,
                     .dest_width_px = rendered.dest_width,
                     .dest_height_px = rendered.dest_height,
+                    .image_width = image.width,
+                    .image_height = image.height,
                     .pixel_format = pixel_format,
-                    .buffer_offset = buffer_offset,
-                    .buffer_len = buffer_len,
+                    .buffer_offset = img_buf.offset,
+                    .buffer_len = img_buf.len,
                 });
             }
         }
@@ -926,6 +953,8 @@ pub const Session = struct {
             try writer.writeU32(placement.src_height);
             try writer.writeU32(placement.dest_width_px);
             try writer.writeU32(placement.dest_height_px);
+            try writer.writeU32(placement.image_width);
+            try writer.writeU32(placement.image_height);
             try writer.writeU32(placement.pixel_format);
             try writer.writeU32(placement.buffer_offset);
             try writer.writeU32(placement.buffer_len);
